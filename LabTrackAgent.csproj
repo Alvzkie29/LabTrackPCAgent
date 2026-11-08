@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LabTrackAgent</RootNamespace>
+    <AssemblyName>LabTrackAgent</AssemblyName>
+
+    <!-- Self-contained deployment settings.
+         Publish with: dotnet publish -c Release -r win-x64
+         (SelfContained and PublishSingleFile below are already set,
+         so you don't need extra flags on the command line.)
+         This bundles the .NET 10 runtime into the output so lab PCs
+         don't need any prerequisite runtime installed. -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Local queue storage for offline login fallback -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>
