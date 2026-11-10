@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private EndSessionWindow? _endSession;
     private AttendanceOptions? _options;
     private string _fullName = string.Empty;
+    private string _loginPassword = string.Empty; // kept only while a password change is pending
     private bool _screenLocked; // true while the lock screen is showing
     private bool _allowClose;   // true only when Windows is shutting down or restarting
 
@@ -44,7 +45,7 @@ public partial class MainWindow : Window
         _screenLocked = true;
         _kiosk.Enable();
 
-        // Alt+F4 and the close button do nothing, except when Windows is shutting down or restarting.
+        // Alt+F4 and the close button do nothing, except when Windows itself is shutting down or restarting.
         Application.Current.SessionEnding += (_, _) => _allowClose = true;
         Closing += (_, e) => { if (!_allowClose) e.Cancel = true; };
 
@@ -131,21 +132,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusText.Text = "Finding your class...";
-        var options = await _api.GetOptionsAsync(_config.PcIdentifier);
-        if (!options.Success)
+        _fullName = login.Data.FullName;
+        PasswordBox.Clear(); // don't leave the password in the box
+
+        // Accounts that still have the starting password must set a new one first.
+        if (login.Data.MustChangePassword)
         {
-            _api.ClearSession();
-            ShowLoginError(options.Unreachable
-                ? "Can't reach the server right now. Please wait a moment and try again."
-                : options.Error ?? "Could not load your class.");
+            _loginPassword = password; // needed once, to prove who is changing it
+            ShowChangePasswordPanel();
             return;
         }
 
-        PasswordBox.Clear(); // don't keep the password around
-        _fullName = login.Data.FullName;
-        _options = options.Data!;
-        ShowConfirmPanel(_options, _fullName);
+        StatusText.Text = "Finding your class...";
+        await LoadClassesAsync();
     }
 
     private void ShowLoginError(string message)
@@ -155,7 +154,90 @@ public partial class MainWindow : Window
         StatusText.Text = message;
     }
 
+    // ---------- Screen 3: set a new password ----------
+
+    private void ShowChangePasswordPanel()
+    {
+        ChangeWelcomeText.Text = $"Welcome, {_fullName}";
+        NewPasswordBox.Clear();
+        ConfirmPasswordBox.Clear();
+        ChangeStatusText.Text = string.Empty;
+        SaveNewPasswordButton.IsEnabled = true;
+        CancelChangeButton.IsEnabled = true;
+
+        LoginPanel.Visibility = Visibility.Collapsed;
+        NewPasswordPanel.Visibility = Visibility.Visible;
+    }
+
+    private async void SaveNewPasswordButton_Click(object sender, RoutedEventArgs e)
+    {
+        var newPassword = NewPasswordBox.Password;
+
+        if (newPassword.Length < 6)
+        {
+            ShowChangeError("Use at least 6 characters.");
+            return;
+        }
+        if (newPassword != ConfirmPasswordBox.Password)
+        {
+            ShowChangeError("The two passwords don't match.");
+            return;
+        }
+        if (newPassword == _loginPassword)
+        {
+            ShowChangeError("Choose a password different from your starting password.");
+            return;
+        }
+
+        SaveNewPasswordButton.IsEnabled = false;
+        CancelChangeButton.IsEnabled = false;
+        ChangeStatusText.Foreground = System.Windows.Media.Brushes.LightGray;
+        ChangeStatusText.Text = "Saving your new password...";
+
+        var result = await _api.ChangePasswordAsync(_loginPassword, newPassword);
+        if (!result.Success)
+        {
+            ShowChangeError(result.Unreachable
+                ? "Can't reach the server right now. Please try again."
+                : result.Error ?? "Could not change the password.");
+            return;
+        }
+
+        _loginPassword = string.Empty;
+        NewPasswordBox.Clear();
+        ConfirmPasswordBox.Clear();
+
+        ChangeStatusText.Text = "Finding your class...";
+        await LoadClassesAsync();
+    }
+
+    private void ShowChangeError(string message)
+    {
+        SaveNewPasswordButton.IsEnabled = true;
+        CancelChangeButton.IsEnabled = true;
+        ChangeStatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
+        ChangeStatusText.Text = message;
+    }
+
+    private void CancelChangeButton_Click(object sender, RoutedEventArgs e) => ResetToLogin();
+
     // ---------- Screen 2: confirm the class ----------
+
+    private async Task LoadClassesAsync()
+    {
+        var options = await _api.GetOptionsAsync(_config.PcIdentifier);
+        if (!options.Success)
+        {
+            ResetToLogin();
+            ShowLoginError(options.Unreachable
+                ? "Can't reach the server right now. Please wait a moment and try again."
+                : options.Error ?? "Could not load your class.");
+            return;
+        }
+
+        _options = options.Data!;
+        ShowConfirmPanel(_options, _fullName);
+    }
 
     private void ShowConfirmPanel(AttendanceOptions options, string fullName)
     {
@@ -191,6 +273,7 @@ public partial class MainWindow : Window
 
         SetConfirmControlsEnabled(true);
         LoginPanel.Visibility = Visibility.Collapsed;
+        NewPasswordPanel.Visibility = Visibility.Collapsed;
         ConfirmPanel.Visibility = Visibility.Visible;
     }
 
@@ -261,12 +344,16 @@ public partial class MainWindow : Window
     {
         _api.ClearSession();
         _options = null;
+        _loginPassword = string.Empty;
 
         PasswordBox.Clear();
+        NewPasswordBox.Clear();
+        ConfirmPasswordBox.Clear();
         StatusText.Text = string.Empty;
         LoginButton.IsEnabled = true;
 
         ConfirmPanel.Visibility = Visibility.Collapsed;
+        NewPasswordPanel.Visibility = Visibility.Collapsed;
         LoginPanel.Visibility = Visibility.Visible;
     }
 }

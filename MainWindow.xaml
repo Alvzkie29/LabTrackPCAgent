@@ -62,5 +62,32 @@
                     Click="CancelButton_Click"/>
         </StackPanel>
 
+        <!-- Screen 3: set a new password (shown when the account still has the starting password) -->
+        <StackPanel x:Name="NewPasswordPanel" VerticalAlignment="Center" Visibility="Collapsed"
+            MaxWidth="336" HorizontalAlignment="Center">
+
+            <TextBlock x:Name="ChangeWelcomeText" FontSize="20" FontWeight="Bold" Foreground="White"
+               TextWrapping="Wrap" Margin="0,0,0,4"/>
+            <TextBlock Text="You are using your starting password. Choose a new one to continue."
+               FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+            <TextBlock Text="New password" Foreground="#CCCCCC" FontSize="12" Margin="2,0,0,4"/>
+            <PasswordBox x:Name="NewPasswordBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,12"/>
+
+            <TextBlock Text="Confirm new password" Foreground="#CCCCCC" FontSize="12" Margin="2,0,0,4"/>
+            <PasswordBox x:Name="ConfirmPasswordBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,6"/>
+
+            <TextBlock Text="At least 6 characters, with a lowercase letter and a number."
+               FontSize="11" Foreground="#888888" TextWrapping="Wrap" Margin="2,0,0,4"/>
+
+            <TextBlock x:Name="ChangeStatusText" Foreground="#FF6B6B" FontSize="12"
+               TextWrapping="Wrap" Margin="2,4,2,8" MinHeight="16"/>
+
+            <Button x:Name="SaveNewPasswordButton" Content="Save and continue" Height="40" FontSize="14"
+            FontWeight="SemiBold" Click="SaveNewPasswordButton_Click" Margin="0,0,0,8"/>
+            <Button x:Name="CancelChangeButton" Content="Cancel" Height="32" FontSize="12"
+            Click="CancelChangeButton_Click"/>
+        </StackPanel>
+
     </Grid>
 </Window>

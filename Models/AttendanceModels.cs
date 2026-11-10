@@ -12,6 +12,7 @@ public class AuthResponse
     public string Token { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = new();
+    public bool MustChangePassword { get; set; }
 }
 
 /// <summary>One class that can be chosen on the confirm screen.</summary>
@@ -45,4 +46,14 @@ public class ConfirmResponse
 {
     public int AttendanceId { get; set; }
     public bool AlreadyRecorded { get; set; }
+}
+public class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+public class MessageResponse
+{
+    public string? Message { get; set; }
 }

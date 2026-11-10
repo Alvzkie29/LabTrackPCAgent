@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-
+using System.Text.Json;
 namespace LabTrackAgent.Services;
 
 /// <summary>The outcome of one API call. Unreachable means the server could not be contacted at all.</summary>
@@ -51,6 +51,10 @@ public class ApiClient
     public Task<ApiResult<ConfirmResponse>> ConfirmAsync(string pcIdentifier, int sectionId) =>
         SendAsync<ConfirmResponse>(() => _http.PostAsJsonAsync(
             "agent/confirm", new ConfirmRequest { PcIdentifier = pcIdentifier, SectionId = sectionId }));
+    public Task<ApiResult<MessageResponse>> ChangePasswordAsync(string currentPassword, string newPassword) =>
+    SendAsync<MessageResponse>(() => _http.PostAsJsonAsync(
+        "auth/change-password",
+        new ChangePasswordRequest { CurrentPassword = currentPassword, NewPassword = newPassword }));
 
     /// <summary>Forgets the token, for example when the student cancels or the session ends.</summary>
     public void ClearSession() => _http.DefaultRequestHeaders.Authorization = null;
@@ -87,7 +91,17 @@ public class ApiClient
                     return new ApiResult<T> { Success = true, Data = data };
                 }
 
-                var body = (await response.Content.ReadAsStringAsync()).Trim().Trim('"');
+                var body = (await response.Content.ReadAsStringAsync()).Trim();
+                if (body.StartsWith('['))
+                {
+                    try
+                    {
+                        var items = JsonSerializer.Deserialize<List<string>>(body);
+                        if (items is { Count: > 0 }) body = string.Join(" ", items);
+                    }
+                    catch (JsonException) { /* keep the raw text */ }
+                }
+                body = body.Trim('"');
                 return new ApiResult<T> { Error = string.IsNullOrWhiteSpace(body) ? DescribeStatus(response.StatusCode) : body };
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
