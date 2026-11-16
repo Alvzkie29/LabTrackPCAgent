@@ -56,6 +56,11 @@ public class ApiClient
         "auth/change-password",
         new ChangePasswordRequest { CurrentPassword = currentPassword, NewPassword = newPassword }));
 
+    /// <summary>Staff only: unlocks this PC for maintenance. The server writes it to the audit log.</summary>
+    public Task<ApiResult<MessageResponse>> StaffUnlockAsync(string pcIdentifier) =>
+        SendAsync<MessageResponse>(() => _http.PostAsJsonAsync(
+            "agent/staff-unlock", new { PcIdentifier = pcIdentifier }));
+
     /// <summary>Forgets the token, for example when the student cancels or the session ends.</summary>
     public void ClearSession() => _http.DefaultRequestHeaders.Authorization = null;
 

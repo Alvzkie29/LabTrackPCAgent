@@ -9,12 +9,12 @@ public partial class EndSessionWindow : Window
 
     public event EventHandler? EndRequested;
 
-    public EndSessionWindow(string fullName, bool alreadyRecorded)
+    public EndSessionWindow(string fullName, string info)
     {
         InitializeComponent();
 
         NameText.Text = fullName;
-        InfoText.Text = alreadyRecorded ? "Attendance already recorded" : "Attendance recorded";
+        InfoText.Text = info;
 
         // Top center of the screen.
         Left = (SystemParameters.WorkArea.Width - Width) / 2;

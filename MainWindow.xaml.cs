@@ -78,7 +78,28 @@ public partial class MainWindow : Window
         _kiosk?.Disable();
         Hide();
 
-        _endSession = new EndSessionWindow(_fullName, alreadyRecorded);
+        _endSession = new EndSessionWindow(_fullName,
+            alreadyRecorded ? "Attendance already recorded" : "Attendance recorded");
+        _endSession.EndRequested += (_, _) => EndSession();
+        _endSession.Show();
+    }
+
+    private void UnlockForStaff()
+    {
+        if (!_lockActive)
+        {
+            MessageBox.Show(this, "Unlocked for maintenance. No attendance was recorded.",
+                "LabTrack", MessageBoxButton.OK, MessageBoxImage.Information);
+            Close();
+            return;
+        }
+
+        _screenLocked = false;
+        _kiosk?.Disable();
+        Hide();
+
+        // Same End Session bar as a student; pressing it locks the PC again.
+        _endSession = new EndSessionWindow(_fullName, "Maintenance · no attendance recorded");
         _endSession.EndRequested += (_, _) => EndSession();
         _endSession.Show();
     }
@@ -125,10 +146,33 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!login.Data!.Roles.Contains("Student"))
+        var roles = login.Data!.Roles;
+
+        // Staff unlock the PC for maintenance. No attendance is recorded.
+        if (roles.Contains("LabAssistant") || roles.Contains("Custodian") || roles.Contains("Administrator"))
+        {
+            _fullName = login.Data.FullName;
+            PasswordBox.Clear();
+            StatusText.Text = "Unlocking for maintenance...";
+
+            var unlock = await _api.StaffUnlockAsync(_config.PcIdentifier);
+            if (!unlock.Success)
+            {
+                _api.ClearSession();
+                ShowLoginError(unlock.Unreachable
+                    ? "Can't reach the server right now. Please wait a moment and try again."
+                    : unlock.Error ?? "Could not unlock this computer.");
+                return;
+            }
+
+            UnlockForStaff();
+            return;
+        }
+
+        if (!roles.Contains("Student"))
         {
             _api.ClearSession();
-            ShowLoginError("Only student accounts can log in on lab computers.");
+            ShowLoginError("Only student and laboratory staff accounts can log in on lab computers.");
             return;
         }
 
