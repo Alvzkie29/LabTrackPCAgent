@@ -18,6 +18,7 @@ public class ApiResult<T>
 public class ApiClient
 {
     private readonly HttpClient _http;
+    private readonly HttpClient? _master;
     private const int MaxAttempts = 3;
     private static readonly TimeSpan DelayBetweenAttempts = TimeSpan.FromSeconds(1);
 
@@ -30,6 +31,14 @@ public class ApiClient
             BaseAddress = new Uri(config.ApiBaseUrl.TrimEnd('/') + "/"),
             Timeout = TimeSpan.FromSeconds(4)
         };
+        if (!string.IsNullOrWhiteSpace(config.MasterPcUrl))
+        {
+            _master = new HttpClient
+            {
+                BaseAddress = new Uri(config.MasterPcUrl.TrimEnd('/') + "/"),
+                Timeout = TimeSpan.FromSeconds(4)
+            };
+        }
     }
 
     /// <summary>Checks the credentials through the same endpoint the dashboard uses, then keeps the token.</summary>
@@ -60,6 +69,19 @@ public class ApiClient
     public Task<ApiResult<MessageResponse>> StaffUnlockAsync(string pcIdentifier) =>
         SendAsync<MessageResponse>(() => _http.PostAsJsonAsync(
             "agent/staff-unlock", new { PcIdentifier = pcIdentifier }));
+    // ---------- Master PC fallback (used only when the server cannot be reached) ----------
+
+    public bool HasMasterPc => _master is not null;
+
+    public Task<ApiResult<OfflineOptions>> OfflineOptionsAsync(string identifier, string password, string pcIdentifier) =>
+        SendAsync<OfflineOptions>(() => _master!.PostAsJsonAsync(
+            "offline/options", new { Identifier = identifier, Password = password, PcIdentifier = pcIdentifier }));
+
+    public Task<ApiResult<ConfirmResponse>> OfflineConfirmAsync(
+        string identifier, string password, string pcIdentifier, int sectionId) =>
+        SendAsync<ConfirmResponse>(() => _master!.PostAsJsonAsync(
+            "offline/confirm",
+            new { Identifier = identifier, Password = password, PcIdentifier = pcIdentifier, SectionId = sectionId }));
 
     /// <summary>Forgets the token, for example when the student cancels or the session ends.</summary>
     public void ClearSession() => _http.DefaultRequestHeaders.Authorization = null;

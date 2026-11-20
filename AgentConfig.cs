@@ -23,6 +23,11 @@ public class AgentConfig
     public int LabId { get; set; } = 1;
     public bool LockEnabled { get; set; } = false;
 
+    /// <summary>The laboratory's Master PC (Lab Sync Service), used when the server cannot be reached.</summary>
+    public string? MasterPcUrl { get; set; }
+
+    /// <summary>Salted hash of the staff emergency code ("salt:hash"). The code itself is never stored.</summary>
+    public string? EmergencyCodeHash { get; set; }
     private const string ConfigFileName = "agent.config.json";
 
     public static AgentConfig Load()
