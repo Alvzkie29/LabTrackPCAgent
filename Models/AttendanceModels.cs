@@ -24,9 +24,17 @@ public class SectionOption
     public string SubjectTitle { get; set; } = string.Empty;
     public TimeSpan StartTime { get; set; }
     public TimeSpan EndTime { get; set; }
+    public bool IsEnrolled { get; set; }
+    public bool CanConfirm { get; set; }
+    public string EligibilityStatus { get; set; } = string.Empty;
+    public string EligibilityMessage { get; set; } = "Session eligibility is unavailable. Please contact laboratory staff.";
+
+    public string EligibilityLabel => CanConfirm
+        ? "Available now - assigned to you"
+        : $"Unavailable - {EligibilityMessage}";
 
     public string Display =>
-        $"{SubjectCode} - {SubjectTitle} ({DateTime.Today.Add(StartTime):h:mm tt} to {DateTime.Today.Add(EndTime):h:mm tt})";
+        $"Class {SectionCode} - {SubjectCode} - {SubjectTitle} ({DateTime.Today.Add(StartTime):h:mm tt} to {DateTime.Today.Add(EndTime):h:mm tt})";
 }
 
 /// <summary>Response of GET api/agent/options: the suggested class plus the other classes in this lab today.</summary>
@@ -34,6 +42,7 @@ public class AttendanceOptions
 {
     public SectionOption? Suggested { get; set; }
     public List<SectionOption> Alternatives { get; set; } = new();
+    public string ScheduleMessage { get; set; } = "Only your assigned classes can record attendance during their scheduled time.";
 }
 
 public class ConfirmRequest
