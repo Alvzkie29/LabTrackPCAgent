@@ -16,7 +16,9 @@ public partial class MainWindow : Window
     private string _loginPassword = string.Empty; // kept only while a password change is pending
     private bool _screenLocked; // true while the lock screen is showing
     private bool _allowClose;   // true only when Windows is shutting down or restarting
-                                // Master PC fallback: set when the server was unreachable and the Master PC checked the login.
+    private bool _syncingLoginPassword;
+
+    // Master PC fallback: set when the server was unreachable and the Master PC checked the login.
     private bool _offline;
     private string _offlineId = string.Empty;
     private string _offlinePassword = string.Empty; // kept only until the attendance is queued
@@ -202,6 +204,48 @@ public partial class MainWindow : Window
 
     // ---------- Screen 1: login ----------
 
+    private void LoginPassword_Changed(object sender, RoutedEventArgs e)
+    {
+        PasswordBox.Tag = PasswordBox.SecurePassword.Length == 0 ? "Empty" : "Filled";
+        if (_syncingLoginPassword || RevealedPasswordBox is null) return;
+
+        _syncingLoginPassword = true;
+        try
+        {
+            RevealedPasswordBox.Text = ShowPasswordToggle?.IsChecked == true ? PasswordBox.Password : string.Empty;
+        }
+        finally { _syncingLoginPassword = false; }
+    }
+
+    private void RevealedPassword_Changed(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_syncingLoginPassword || PasswordBox is null) return;
+        _syncingLoginPassword = true;
+        try { PasswordBox.Password = RevealedPasswordBox.Text; }
+        finally { _syncingLoginPassword = false; }
+    }
+
+    private void PasswordVisibility_Changed(object sender, RoutedEventArgs e)
+    {
+        if (PasswordBox is null || RevealedPasswordBox is null) return;
+        var reveal = ShowPasswordToggle.IsChecked == true;
+        _syncingLoginPassword = true;
+        try { RevealedPasswordBox.Text = reveal ? PasswordBox.Password : string.Empty; }
+        finally { _syncingLoginPassword = false; }
+
+        PasswordBox.Visibility = reveal ? Visibility.Collapsed : Visibility.Visible;
+        RevealedPasswordBox.Visibility = reveal ? Visibility.Visible : Visibility.Collapsed;
+        var action = reveal ? "Hide password" : "Show password";
+        ShowPasswordToggle.ToolTip = action;
+        System.Windows.Automation.AutomationProperties.SetName(ShowPasswordToggle, action);
+        if (reveal)
+        {
+            RevealedPasswordBox.Focus();
+            RevealedPasswordBox.CaretIndex = RevealedPasswordBox.Text.Length;
+        }
+        else { PasswordBox.Focus(); }
+    }
+
     private async void LoginButton_Click(object sender, RoutedEventArgs e)
     {
         var studentId = StudentIdBox.Text.Trim();
@@ -214,6 +258,7 @@ public partial class MainWindow : Window
         }
 
         LoginButton.IsEnabled = false;
+        ShowPasswordToggle.IsChecked = false;
         StatusText.Foreground = System.Windows.Media.Brushes.LightGray;
         StatusText.Text = "Signing in...";
 
@@ -479,18 +524,20 @@ public partial class MainWindow : Window
 
         if (hasSuggestion)
         {
-            PromptText.Text = "Is this your class?";
+            PromptText.Text = "This session matches your assigned schedule.";
+            SuggestedLabel.Text = "YOUR ASSIGNED SESSION";
             SuggestedText.Text = options.Suggested!.Display;
-        }
-        else if (hasAlternatives)
-        {
-            PromptText.Text = "No class is running in this laboratory right now.";
-            SuggestedText.Text = "Choose your class from the list.";
+            SuggestedEligibilityText.Text = options.Suggested.EligibilityMessage;
+            SuggestedEligibilityText.Foreground = options.Suggested.CanConfirm
+                ? System.Windows.Media.Brushes.DarkGreen : System.Windows.Media.Brushes.DarkGoldenrod;
         }
         else
         {
-            PromptText.Text = "Nothing is scheduled.";
-            SuggestedText.Text = "No classes are scheduled in this laboratory today. Please ask the laboratory assistant.";
+            PromptText.Text = "No assigned session is available right now.";
+            SuggestedLabel.Text = "SESSION AVAILABILITY";
+            SuggestedText.Text = options.ScheduleMessage;
+            SuggestedEligibilityText.Text = "Ask laboratory staff to check your class list and schedule if this looks incorrect.";
+            SuggestedEligibilityText.Foreground = System.Windows.Media.Brushes.DarkGoldenrod;
         }
 
         YesButton.Visibility = hasSuggestion ? Visibility.Visible : Visibility.Collapsed;
@@ -508,27 +555,36 @@ public partial class MainWindow : Window
         var state = visible ? Visibility.Visible : Visibility.Collapsed;
         OtherClassesBox.Visibility = state;
         RecordSelectedButton.Visibility = state;
+        SelectionEligibilityText.Visibility = state;
+        SelectionEligibilityText.Text = "Unavailable sessions are marked in the list. Only your assigned session can be recorded.";
     }
 
     private void SetConfirmControlsEnabled(bool enabled)
     {
-        YesButton.IsEnabled = enabled;
+        YesButton.IsEnabled = enabled && _options?.Suggested?.CanConfirm == true;
         ChooseOtherButton.IsEnabled = enabled;
         OtherClassesBox.IsEnabled = enabled;
-        RecordSelectedButton.IsEnabled = enabled;
+        RecordSelectedButton.IsEnabled = enabled && OtherClassesBox.SelectedItem is SectionOption { CanConfirm: true };
         CancelButton.IsEnabled = enabled;
+        RefreshScheduleButton.IsEnabled = enabled;
     }
 
     private async void YesButton_Click(object sender, RoutedEventArgs e)
     {
         if (_options?.Suggested is null) return;
-        await RecordAsync(_options.Suggested.SectionId);
+        await RecordAsync(_options.Suggested);
     }
 
     private void ChooseOtherButton_Click(object sender, RoutedEventArgs e)
     {
         ChooseOtherButton.Visibility = Visibility.Collapsed;
         SetListVisible(true);
+    }
+
+    private async void RefreshScheduleButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetConfirmControlsEnabled(false);
+        await LoadClassesAsync();
     }
 
     private async void RecordSelectedButton_Click(object sender, RoutedEventArgs e)
@@ -540,18 +596,34 @@ public partial class MainWindow : Window
             return;
         }
 
-        await RecordAsync(selected.SectionId);
+        await RecordAsync(selected);
     }
 
-    private async Task RecordAsync(int sectionId)
+    private void OtherClassesBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
+        if (SelectionEligibilityText is null || RecordSelectedButton is null) return;
+        var selected = OtherClassesBox.SelectedItem as SectionOption;
+        RecordSelectedButton.IsEnabled = OtherClassesBox.IsEnabled && selected?.CanConfirm == true;
+        SelectionEligibilityText.Text = selected?.EligibilityLabel
+            ?? "Unavailable sessions are marked in the list. Only your assigned session can be recorded.";
+    }
+
+    private async Task RecordAsync(SectionOption option)
+    {
+        if (!option.CanConfirm)
+        {
+            ConfirmStatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
+            ConfirmStatusText.Text = option.EligibilityMessage;
+            return;
+        }
         SetConfirmControlsEnabled(false);
-        ConfirmStatusText.Foreground = System.Windows.Media.Brushes.LightGray;
+        ConfirmStatusText.Foreground = System.Windows.Media.Brushes.DimGray;
         ConfirmStatusText.Text = "Recording your attendance...";
 
+        var sectionId = option.SectionId;
         var result = _offline
-        ? await _api.OfflineConfirmAsync(_offlineId, _offlinePassword, _config.PcIdentifier, sectionId)
-        : await _api.ConfirmAsync(_config.PcIdentifier, sectionId);
+            ? await _api.OfflineConfirmAsync(_offlineId, _offlinePassword, _config.PcIdentifier, sectionId)
+            : await _api.ConfirmAsync(_config.PcIdentifier, sectionId);
 
         if (result.Success)
         {
@@ -583,6 +655,7 @@ public partial class MainWindow : Window
         PasswordBox.Clear();
         NewPasswordBox.Clear();
         ConfirmPasswordBox.Clear();
+        ShowPasswordToggle.IsChecked = false;
         StatusText.Text = string.Empty;
         LoginButton.IsEnabled = true;
 

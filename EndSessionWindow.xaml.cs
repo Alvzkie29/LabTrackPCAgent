@@ -3,13 +3,26 @@ using System.Windows.Media;
 
 namespace LabTrackAgent;
 
-/// <summary>
-/// The small bar shown while someone is using the PC. "End Session" locks the PC again.
-/// It can be hidden down to a small tab so it does not cover the student's work.
-/// </summary>
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Interop;
+using Forms = System.Windows.Forms;
+
+/// <summary>A collapsible session bar. "End Session" locks the PC again.</summary>
 public partial class EndSessionWindow : Window
 {
     private bool _allowClose;
+    private bool _positionInitialized;
+    private bool _isDragging;
+    private bool _updatingPresentation;
+    private bool _isCompact;
+    private enum DockSide { None, Left, Right }
+    private DockSide _dockSide;
+    private const double DockThreshold = 32;
+    private const double EdgeMargin = 4;
+    private readonly Forms.NotifyIcon _trayIcon;
+    private readonly Forms.ContextMenuStrip _trayMenu;
+    private readonly System.Drawing.Icon _trayImage;
 
     public event EventHandler? EndRequested;
 
@@ -20,9 +33,149 @@ public partial class EndSessionWindow : Window
         NameText.Text = fullName;
         InfoText.Text = info;
 
-        // The bar can't be closed with Alt+F4, except when Windows is shutting down or restarting.
-        Application.Current.SessionEnding += (_, _) => _allowClose = true;
-        Closing += (_, e) => { if (!_allowClose) e.Cancel = true; };
+        using (var resource = Application.GetResourceStream(new Uri("pack://application:,,,/LabTrackAgent;component/Assets/labtrack.ico")).Stream)
+            _trayImage = new System.Drawing.Icon(resource, Forms.SystemInformation.SmallIconSize);
+
+        _trayMenu = new Forms.ContextMenuStrip();
+        _trayMenu.Items.Add("Show session", null, (_, _) => Dispatcher.Invoke(ShowFromTray));
+        _trayMenu.Items.Add(new Forms.ToolStripSeparator());
+        _trayMenu.Items.Add("End Session...", null, (_, _) => Dispatcher.Invoke(() =>
+        {
+            ShowFromTray();
+            EndButton_Click(this, new RoutedEventArgs());
+        }));
+        _trayIcon = new Forms.NotifyIcon
+        {
+            Icon = _trayImage,
+            Text = "LabTrack - session active",
+            ContextMenuStrip = _trayMenu,
+            Visible = true
+        };
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == Forms.MouseButtons.Left)
+                Dispatcher.Invoke(ShowFromTray);
+        };
+
+        Loaded += (_, _) =>
+        {
+            if (_positionInitialized) return;
+            var workArea = GetWorkArea();
+            Left = workArea.Left + Math.Max(0, (workArea.Width - ActualWidth) / 2);
+            Top = workArea.Top + 8;
+            _positionInitialized = true;
+        };
+        SizeChanged += (_, _) => ClampPosition();
+
+        // Close/X and Alt+F4 hide the bar; only confirmed End Session or Windows shutdown closes it.
+        Application.Current.SessionEnding += OnSessionEnding;
+        Closed += (_, _) =>
+        {
+            Application.Current.SessionEnding -= OnSessionEnding;
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+            _trayMenu.Dispose();
+            _trayImage.Dispose();
+        };
+        Closing += (_, e) =>
+        {
+            if (_allowClose) return;
+            e.Cancel = true;
+            Hide();
+        };
+    }
+
+    private void OnSessionEnding(object sender, SessionEndingCancelEventArgs e) => _allowClose = true;
+
+    private Rect GetWorkArea()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return SystemParameters.WorkArea;
+        var area = Forms.Screen.FromHandle(handle).WorkingArea;
+        var transform = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        return new Rect(transform.Transform(new Point(area.Left, area.Top)),
+                        transform.Transform(new Point(area.Right, area.Bottom)));
+    }
+
+    private void ClampPosition()
+    {
+        if (!_positionInitialized || _isDragging || _updatingPresentation) return;
+        var workArea = GetWorkArea();
+        var preferredLeft = _dockSide switch
+        {
+            DockSide.Left => workArea.Left + EdgeMargin,
+            DockSide.Right => workArea.Right - ActualWidth - EdgeMargin,
+            _ => Left
+        };
+        Left = Math.Clamp(preferredLeft, workArea.Left, Math.Max(workArea.Left, workArea.Right - ActualWidth));
+        Top = Math.Clamp(Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - ActualHeight));
+    }
+
+    private void SessionBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Buttons keep their normal click actions. The logo and text are drag handles.
+        for (var source = e.OriginalSource as DependencyObject; source is not null;)
+        {
+            if (source is ButtonBase) return;
+            source = source is FrameworkContentElement content ? content.Parent : VisualTreeHelper.GetParent(source);
+        }
+        if (Mouse.LeftButton != MouseButtonState.Pressed) return;
+        _isDragging = true;
+        try { DragMove(); }
+        finally { _isDragging = false; }
+        DockToNearestEdge();
+        e.Handled = true;
+    }
+
+    private void DockToNearestEdge()
+    {
+        var workArea = GetWorkArea();
+        var nearLeft = Left <= workArea.Left + DockThreshold;
+        var nearRight = Left + ActualWidth >= workArea.Right - DockThreshold;
+        _dockSide = nearLeft && (!nearRight || Math.Abs(Left - workArea.Left) <= Math.Abs(workArea.Right - Left - ActualWidth))
+            ? DockSide.Left
+            : nearRight ? DockSide.Right : DockSide.None;
+        UpdatePresentation();
+    }
+
+    private void UpdatePresentation()
+    {
+        _updatingPresentation = true;
+        try
+        {
+            var docked = _dockSide != DockSide.None;
+            ExpandedPanel.Visibility = !docked && !_isCompact ? Visibility.Visible : Visibility.Collapsed;
+            CompactPanel.Visibility = !docked && _isCompact ? Visibility.Visible : Visibility.Collapsed;
+            VerticalPanel.Visibility = docked ? Visibility.Visible : Visibility.Collapsed;
+            Width = docked ? 52 : _isCompact ? 164 : 430;
+            UpdateLayout();
+        }
+        finally { _updatingPresentation = false; }
+        ClampPosition();
+    }
+
+    private void HideToTrayButton_Click(object sender, RoutedEventArgs e) => Hide();
+
+    private void ShowFromTray()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        ClampPosition();
+        Activate();
+    }
+
+    private void HideSessionButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isCompact = true;
+        UpdatePresentation();
+        ShowSessionButton.Focus();
+    }
+
+    private void ShowSessionButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isCompact = false;
+        UpdatePresentation();
+        HideSessionButton.Focus();
     }
 
     public void CloseForReal()
@@ -32,39 +185,26 @@ public partial class EndSessionWindow : Window
     }
 
     /// <summary>
-    /// Called a few minutes before the class ends: brings the bar back if it was hidden and
-    /// keeps it visible, so the student sees the warning and saves their work.
+    /// Called a few minutes before the class ends: brings the bar back from the tray, the
+    /// collapsed tab or the side dock, and keeps it open so the student sees the warning.
     /// </summary>
     public void ShowClassEnding(int minutes)
     {
-        SetHidden(false);
-        HideButton.IsEnabled = false; // the warning stays on screen
+        _dockSide = DockSide.None;
+        _isCompact = false;
+        ShowFromTray();
+        UpdatePresentation();
+        HideSessionButton.IsEnabled = false; // the warning stays on screen
 
         InfoText.Text = minutes <= 1
             ? "Class ends in 1 minute. Save your work now."
             : $"Class ends in {minutes} minutes. Save your work.";
-        InfoText.Foreground = Brushes.Orange;
+        InfoText.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB4, 0x23, 0x18));
         InfoText.FontWeight = FontWeights.SemiBold;
+        _trayIcon.Text = "LabTrack - class ending soon";
 
         System.Media.SystemSounds.Exclamation.Play();
         Activate();
-    }
-
-    private void HideButton_Click(object sender, RoutedEventArgs e) => SetHidden(true);
-
-    private void ShowButton_Click(object sender, RoutedEventArgs e) => SetHidden(false);
-
-    private void SetHidden(bool hidden)
-    {
-        FullBar.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
-        ShowButton.Visibility = hidden ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>Keeps the bar (or the tab) centered at the top of the screen whenever its size changes.</summary>
-    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        Left = (SystemParameters.WorkArea.Width - ActualWidth) / 2;
-        Top = ShowButton.Visibility == Visibility.Visible ? 0 : 8;
     }
 
     private void EndButton_Click(object sender, RoutedEventArgs e)

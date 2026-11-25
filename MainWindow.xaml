@@ -1,101 +1,907 @@
+
 <Window x:Class="LabTrackAgent.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LabTrack" Height="560" Width="400"
+        Title="LabTrack"
+        Height="650"
+        Width="430"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
-        Background="#1E1E2E">
+        WindowState="Maximized"
+        ResizeMode="CanResize"
+        Background="#F6F3EF"
+        FontFamily="Segoe UI"
+        FontSize="13"
+        UseLayoutRounding="True">
 
-    <!-- Phase 1: a normal window. The full-screen lock comes in a later phase. -->
+    <Window.Resources>
 
-    <Grid Margin="32">
+        <!-- Staff portal field treatment, adapted to native WPF controls. -->
+        <Style x:Key="LoginFieldBorder" TargetType="Border">
+            <Setter Property="Background" Value="#FAF9F7"/>
+            <Setter Property="BorderBrush" Value="#E6DFDA"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="#800000"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
-        <!-- Screen 1: login -->
-        <StackPanel x:Name="LoginPanel" VerticalAlignment="Center" MaxWidth="336" HorizontalAlignment="Center">
+        <Style x:Key="LoginTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#332C2C"/>
+            <Setter Property="CaretBrush" Value="#800000"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="42,0,12,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <!-- The native text view applies Padding; applying it here would double it. -->
+                        <Border Background="{TemplateBinding Background}">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <TextBlock Text="LabTrack" FontSize="28" FontWeight="Bold"
-                       Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,4"/>
-            <TextBlock Text="Log in to use this computer" FontSize="13"
-                       Foreground="#AAAAAA" HorizontalAlignment="Center" Margin="0,0,0,24"/>
+        <Style x:Key="LoginPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#332C2C"/>
+            <Setter Property="CaretBrush" Value="#800000"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="42,0,44,0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <!-- Match the native text view's single inset, including revealed passwords. -->
+                        <Border Background="{TemplateBinding Background}">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <TextBlock Text="ID Number" Foreground="#CCCCCC" FontSize="12" Margin="2,0,0,4"/>
-            <TextBox x:Name="StudentIdBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,16"/>
+        <Style x:Key="FloatingLoginLabel" TargetType="TextBlock">
+            <Setter Property="Background" Value="#FAF9F7"/>
+            <Setter Property="Foreground" Value="#857B78"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="Margin" Value="38,-8,0,0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
 
-            <TextBlock Text="Password" Foreground="#CCCCCC" FontSize="12" Margin="2,0,0,4"/>
-            <PasswordBox x:Name="PasswordBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,8"/>
+        <Style x:Key="PasswordVisibilityButton" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#AA9B95"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="ToggleBorder" CornerRadius="8" Background="{TemplateBinding Background}"
+                                BorderThickness="1" BorderBrush="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ToggleBorder" Property="Background" Value="#F0EBE7"/>
+                                <Setter Property="Foreground" Value="#800000"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#800000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <TextBlock x:Name="StatusText" Foreground="#FF6B6B" FontSize="12"
-                       TextWrapping="Wrap" Margin="2,4,2,12" MinHeight="16"/>
+        <!-- Minimalist text input -->
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="45"/>
+            <Setter Property="Padding" Value="13,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#30292A"/>
+            <Setter Property="Background" Value="#FCFAF8"/>
+            <Setter Property="BorderBrush" Value="#DDD5CF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="FieldBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin"
+                                     Value="True">
+                                <Setter TargetName="FieldBorder"
+                                        Property="BorderBrush"
+                                        Value="#800000"/>
+                                <Setter TargetName="FieldBorder"
+                                        Property="BorderThickness"
+                                        Value="1.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <Button x:Name="LoginButton" Content="Log In" Height="40" FontSize="14"
-                    FontWeight="SemiBold" Click="LoginButton_Click"/>
-            <!-- Shown only when neither the server nor the Master PC can be reached -->
-            <StackPanel x:Name="EmergencyPanel" Visibility="Collapsed" Margin="0,20,0,0">
-                <TextBlock Text="Offline. Laboratory staff can unlock this computer with the emergency code. No attendance will be recorded."
-                           Foreground="#AAAAAA" FontSize="12" TextWrapping="Wrap" Margin="2,0,2,8"/>
-                <PasswordBox x:Name="EmergencyCodeBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,8"/>
-                <Button x:Name="EmergencyButton" Content="Emergency unlock" Height="36" FontSize="13"
-                        Click="EmergencyButton_Click"/>
-            </StackPanel>
-        </StackPanel>
+        <!-- Minimalist password input -->
+        <Style x:Key="ModernPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Height" Value="45"/>
+            <Setter Property="Padding" Value="13,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#30292A"/>
+            <Setter Property="Background" Value="#FCFAF8"/>
+            <Setter Property="BorderBrush" Value="#DDD5CF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border x:Name="FieldBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin"
+                                     Value="True">
+                                <Setter TargetName="FieldBorder"
+                                        Property="BorderBrush"
+                                        Value="#800000"/>
+                                <Setter TargetName="FieldBorder"
+                                        Property="BorderThickness"
+                                        Value="1.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <!-- Screen 2: confirm the class -->
-        <StackPanel x:Name="ConfirmPanel" VerticalAlignment="Center" Visibility="Collapsed" MaxWidth="336" HorizontalAlignment="Center">
+        <!-- Native class selector with the same field styling as the login form. -->
+        <Style x:Key="ClassOptionItem" TargetType="ComboBoxItem">
+            <Setter Property="IsEnabled" Value="{Binding CanConfirm, FallbackValue=False}"/>
+            <Setter Property="ToolTip" Value="{Binding EligibilityMessage}"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="Foreground" Value="#403535"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="OptionBorder" Background="{TemplateBinding Background}"
+                                CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Display}" TextWrapping="Wrap" LineHeight="18"/>
+                                <TextBlock Text="{Binding EligibilityLabel}" TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0"
+                                           Foreground="#75665E" FontWeight="Normal"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="OptionBorder" Property="Background" Value="#F4EFE9"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="OptionBorder" Property="Background" Value="#F3E5DE"/>
+                                <Setter Property="Foreground" Value="#800000"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <TextBlock x:Name="WelcomeText" FontSize="20" FontWeight="Bold" Foreground="White"
-                       TextWrapping="Wrap" Margin="0,0,0,4"/>
-            <TextBlock x:Name="PromptText" FontSize="13" Foreground="#AAAAAA"
-                       TextWrapping="Wrap" Margin="0,0,0,16"/>
+        <Style x:Key="ModernClassSelector" TargetType="ComboBox">
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#332C2C"/>
+            <Setter Property="Background" Value="#FAF9F7"/>
+            <Setter Property="BorderBrush" Value="#E6DFDA"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="MaxDropDownHeight" Value="240"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource ClassOptionItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="SelectorRoot">
+                            <ToggleButton x:Name="DropdownToggle" Focusable="False" IsTabStop="False"
+                                          Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}" Cursor="Hand"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="12"
+                                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                                            <Grid>
+                                                <Path Data="M 0,0 L 5,0 L 5,5 L 0,5 Z M 8,0 L 13,0 L 13,5 L 8,5 Z M 0,8 L 5,8 L 5,13 L 0,13 Z M 8,8 L 13,8 L 13,13 L 8,13 Z"
+                                                      Stroke="#AC9E98" StrokeThickness="1.2" Width="14" Height="14"
+                                                      Margin="14,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                                <Path x:Name="Chevron" Data="M 0,0 L 5,5 L 10,0" Stroke="#857B78" StrokeThickness="1.5"
+                                                      Margin="0,0,15,0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      RenderTransformOrigin="0.5,0.5"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Chevron" Property="RenderTransform">
+                                                    <Setter.Value><RotateTransform Angle="180"/></Setter.Value>
+                                                </Setter>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="SelectedClass" Margin="40,0,35,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        <Setter Property="TextWrapping" Value="NoWrap"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                            <TextBlock x:Name="ClassPlaceholder" Text="Choose your class" Foreground="#857B78"
+                                       Margin="40,0,35,0" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="6" AllowsTransparency="True"
+                                   Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade">
+                                <Border Width="{Binding ActualWidth, ElementName=SelectorRoot}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Background="#FFFEFD" BorderBrush="#E6DFDA" BorderThickness="1" CornerRadius="12" Padding="2,5">
+                                    <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="SelectedIndex" Value="-1">
+                                <Setter TargetName="ClassPlaceholder" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="SelectedClass" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="DropdownToggle" Property="BorderBrush" Value="#BCA49A"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="DropdownToggle" Property="BorderBrush" Value="#800000"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="DropdownToggle" Property="BorderBrush" Value="#800000"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="SelectorRoot" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <Border Background="#2A2A3C" CornerRadius="6" Padding="14" Margin="0,0,0,16">
-                <TextBlock x:Name="SuggestedText" Foreground="White" FontSize="15"
-                           FontWeight="SemiBold" TextWrapping="Wrap"/>
-            </Border>
+        <!-- Labels -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#514646"/>
+            <Setter Property="Margin" Value="2,0,0,7"/>
+        </Style>
 
-            <Button x:Name="YesButton" Content="Yes, record my attendance" Height="40" FontSize="14"
-                    FontWeight="SemiBold" Click="YesButton_Click" Margin="0,0,0,8"/>
-            <Button x:Name="ChooseOtherButton" Content="No, choose another class" Height="36" FontSize="13"
-                    Click="ChooseOtherButton_Click" Margin="0,0,0,8"/>
+        <!-- Primary action button -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="45"/>
+            <Setter Property="Background" Value="#800000"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="10">
+                            <ContentPresenter
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="#690000"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="#510000"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Opacity"
+                                        Value="0.5"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused"
+                                     Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="#F4C430"/>
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderThickness"
+                                        Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <ComboBox x:Name="OtherClassesBox" Height="36" FontSize="13"
-                      Visibility="Collapsed" Margin="0,0,0,8"/>
-            <Button x:Name="RecordSelectedButton" Content="Record my attendance" Height="40" FontSize="14"
-                    FontWeight="SemiBold" Visibility="Collapsed" Click="RecordSelectedButton_Click"
-                    Margin="0,0,0,8"/>
+        <!-- Secondary action button -->
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Background" Value="#F8F5F2"/>
+            <Setter Property="Foreground" Value="#800000"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderBrush" Value="#E1D7CF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="#F0E6E0"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused"
+                                     Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="#800000"/>
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderThickness"
+                                        Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <TextBlock x:Name="ConfirmStatusText" Foreground="#FF6B6B" FontSize="12"
-                       TextWrapping="Wrap" Margin="2,4,2,8" MinHeight="16"/>
+    </Window.Resources>
 
-            <Button x:Name="CancelButton" Content="Cancel" Height="32" FontSize="12"
-                    Click="CancelButton_Click"/>
-        </StackPanel>
+    <!-- ANIMATED BACKGROUND -->
+    <Grid x:Name="Root" ClipToBounds="True">
 
-        <!-- Screen 3: set a new password (shown when the account still has the starting password) -->
-        <StackPanel x:Name="NewPasswordPanel" VerticalAlignment="Center" Visibility="Collapsed"
-            MaxWidth="336" HorizontalAlignment="Center">
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#F9F6F3" Offset="0"/>
+                <GradientStop Color="#EEE8E3" Offset="0.55"/>
+                <GradientStop Color="#F4EFE9" Offset="1"/>
+            </LinearGradientBrush>
+        </Grid.Background>
 
-            <TextBlock x:Name="ChangeWelcomeText" FontSize="20" FontWeight="Bold" Foreground="White"
-               TextWrapping="Wrap" Margin="0,0,0,4"/>
-            <TextBlock Text="You are using your starting password. Choose a new one to continue."
-               FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,16"/>
+        <!-- Native WPF background animation -->
+        <Grid.Triggers>
+            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                <BeginStoryboard>
+                    <Storyboard RepeatBehavior="Forever"
+                                AutoReverse="True">
 
-            <TextBlock Text="New password" Foreground="#CCCCCC" FontSize="12" Margin="2,0,0,4"/>
-            <PasswordBox x:Name="NewPasswordBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,12"/>
+                        <DoubleAnimation
+                            Storyboard.TargetName="MaroonGlow"
+                            Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                            From="-20"
+                            To="60"
+                            Duration="0:0:12"/>
 
-            <TextBlock Text="Confirm new password" Foreground="#CCCCCC" FontSize="12" Margin="2,0,0,4"/>
-            <PasswordBox x:Name="ConfirmPasswordBox" Height="36" Padding="8,6" FontSize="14" Margin="0,0,0,6"/>
+                        <DoubleAnimation
+                            Storyboard.TargetName="MaroonGlow"
+                            Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                            From="-15"
+                            To="45"
+                            Duration="0:0:15"/>
 
-            <TextBlock Text="At least 6 characters, with a lowercase letter and a number."
-               FontSize="11" Foreground="#888888" TextWrapping="Wrap" Margin="2,0,0,4"/>
+                        <DoubleAnimation
+                            Storyboard.TargetName="GoldGlow"
+                            Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                            From="30"
+                            To="-50"
+                            Duration="0:0:14"/>
 
-            <TextBlock x:Name="ChangeStatusText" Foreground="#FF6B6B" FontSize="12"
-               TextWrapping="Wrap" Margin="2,4,2,8" MinHeight="16"/>
+                        <DoubleAnimation
+                            Storyboard.TargetName="GoldGlow"
+                            Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                            From="30"
+                            To="-40"
+                            Duration="0:0:17"/>
 
-            <Button x:Name="SaveNewPasswordButton" Content="Save and continue" Height="40" FontSize="14"
-            FontWeight="SemiBold" Click="SaveNewPasswordButton_Click" Margin="0,0,0,8"/>
-            <Button x:Name="CancelChangeButton" Content="Cancel" Height="32" FontSize="12"
-            Click="CancelChangeButton_Click"/>
-        </StackPanel>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Grid.Triggers>
+
+        <!-- Maroon gradient glow -->
+        <Ellipse x:Name="MaroonGlow"
+                 Width="390"
+                 Height="390"
+                 HorizontalAlignment="Left"
+                 VerticalAlignment="Top"
+                 Margin="-170,-160,0,0"
+                 IsHitTestVisible="False">
+
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#33800000" Offset="0"/>
+                    <GradientStop Color="#14800000" Offset="0.5"/>
+                    <GradientStop Color="#00800000" Offset="1"/>
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+
+            <Ellipse.RenderTransform>
+                <TranslateTransform/>
+            </Ellipse.RenderTransform>
+        </Ellipse>
+
+        <!-- Gold gradient glow -->
+        <Ellipse x:Name="GoldGlow"
+                 Width="430"
+                 Height="430"
+                 HorizontalAlignment="Right"
+                 VerticalAlignment="Bottom"
+                 Margin="0,0,-190,-190"
+                 IsHitTestVisible="False">
+
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#40F4C430" Offset="0"/>
+                    <GradientStop Color="#16F4C430" Offset="0.5"/>
+                    <GradientStop Color="#00F4C430" Offset="1"/>
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+
+            <Ellipse.RenderTransform>
+                <TranslateTransform/>
+            </Ellipse.RenderTransform>
+        </Ellipse>
+
+        <!-- MAIN CONTENT -->
+        <ScrollViewer
+            x:Name="MainScroll"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
+            Background="Transparent">
+
+            <Grid MinHeight="{Binding ViewportHeight, ElementName=MainScroll}">
+
+                <StackPanel
+                    Width="370"
+                    MaxWidth="370"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="22,32,22,48">
+
+                    <!-- LOGIN CARD -->
+                    <Border
+                        Background="#FDFDFC"
+                        BorderBrush="#E6DDD6"
+                        BorderThickness="1"
+                        CornerRadius="22"
+                        Padding="26">
+
+                        <Border.Effect>
+                            <DropShadowEffect
+                                Color="#49332C"
+                                BlurRadius="26"
+                                ShadowDepth="7"
+                                Opacity="0.10"/>
+                        </Border.Effect>
+
+                        <StackPanel>
+
+                            <!-- BRAND -->
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,0,0,28">
+
+                                <StackPanel Margin="11,2,0,0">
+                                    <TextBlock
+                                        Text="LabTrack"
+                                        Foreground="#252326"
+                                        FontSize="17"
+                                        FontWeight="Bold"/>
+                                </StackPanel>
+
+                            </StackPanel>
+
+                            <!-- SCREEN 1: STUDENT LOGIN -->
+                            <StackPanel
+                                x:Name="LoginPanel"
+                                Visibility="Visible">
+
+                                <TextBlock
+                                    Text="Welcome back."
+                                    Foreground="#252326"
+                                    FontSize="26"
+                                    FontWeight="SemiBold"
+                                    Margin="0,0,0,7"/>
+
+                                <TextBlock
+                                    Text="Sign in to record your laboratory session."
+                                    Foreground="#847A75"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,27"/>
+
+                                <Grid x:Name="IdentifierField" Height="40" Margin="0,0,0,22">
+                                    <Border Style="{StaticResource LoginFieldBorder}">
+                                        <Grid>
+                                            <TextBox x:Name="StudentIdBox" Style="{StaticResource LoginTextBox}"
+                                                     AutomationProperties.Name="School ID or Email"
+                                                     SpellCheck.IsEnabled="False"/>
+                                            <Path Data="M 2,4 L 18,4 L 18,16 L 2,16 Z M 2,4 L 10,10 L 18,4"
+                                                  Width="17" Height="17" Stretch="Uniform" Stroke="#AC9E98"
+                                                  StrokeThickness="1.5" Margin="15,0,0,0"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="School ID or Email">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource FloatingLoginLabel}">
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding Text, ElementName=StudentIdBox}" Value=""/>
+                                                            <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=IdentifierField}" Value="False"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                                        <Setter Property="Margin" Value="38,0,0,0"/>
+                                                        <Setter Property="FontSize" Value="13"/>
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=IdentifierField}" Value="True">
+                                                        <Setter Property="Foreground" Value="#800000"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Grid x:Name="PasswordField" Height="40" Margin="0,0,0,8">
+                                    <Border Style="{StaticResource LoginFieldBorder}">
+                                        <Grid>
+                                            <PasswordBox x:Name="PasswordBox" Tag="Empty" Style="{StaticResource LoginPasswordBox}"
+                                                         AutomationProperties.Name="Password" PasswordChanged="LoginPassword_Changed"/>
+                                            <TextBox x:Name="RevealedPasswordBox" Visibility="Collapsed" Padding="42,0,44,0"
+                                                     Style="{StaticResource LoginTextBox}" AutomationProperties.Name="Password (visible)"
+                                                     SpellCheck.IsEnabled="False" TextChanged="RevealedPassword_Changed"/>
+                                            <Path Data="M 5,9 L 5,6 A 5,5 0 0 1 15,6 L 15,9 M 3,9 L 17,9 L 17,20 L 3,20 Z M 10,13 L 10,16"
+                                                  Width="17" Height="17" Stretch="Uniform" Stroke="#AC9E98" StrokeThickness="1.5"
+                                                  Margin="15,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                            <ToggleButton x:Name="ShowPasswordToggle" Width="32" Height="32" Margin="0,0,7,0"
+                                                          Style="{StaticResource PasswordVisibilityButton}"
+                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                          ToolTip="Show password" AutomationProperties.Name="Show password"
+                                                          Checked="PasswordVisibility_Changed" Unchecked="PasswordVisibility_Changed">
+                                                <Grid Width="18" Height="18">
+                                                    <Path Data="M 1,9 C 5,1 13,1 17,9 C 13,17 5,17 1,9 Z"
+                                                          Stroke="{Binding Foreground, ElementName=ShowPasswordToggle}" StrokeThickness="1.4"/>
+                                                    <Ellipse Width="5" Height="5" Stroke="{Binding Foreground, ElementName=ShowPasswordToggle}" StrokeThickness="1.4"/>
+                                                    <Path Data="M 2,2 L 16,16" Stroke="{Binding Foreground, ElementName=ShowPasswordToggle}" StrokeThickness="1.5">
+                                                        <Path.Style>
+                                                            <Style TargetType="Path">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsChecked, ElementName=ShowPasswordToggle}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Path.Style>
+                                                    </Path>
+                                                </Grid>
+                                            </ToggleButton>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="Password">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource FloatingLoginLabel}">
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding Tag, ElementName=PasswordBox}" Value="Empty"/>
+                                                            <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=PasswordField}" Value="False"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                                        <Setter Property="Margin" Value="38,0,0,0"/>
+                                                        <Setter Property="FontSize" Value="13"/>
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=PasswordField}" Value="True">
+                                                        <Setter Property="Foreground" Value="#800000"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <TextBlock
+                                    x:Name="StatusText"
+                                    Foreground="#B42318"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    MinHeight="18"
+                                    Margin="2,5,2,13"/>
+
+                                <Button
+                                    x:Name="LoginButton"
+                                    Content="Sign in"
+                                    Style="{StaticResource PrimaryButton}"
+                                    IsDefault="True"
+                                    Click="LoginButton_Click"/>
+
+                                <!-- Shown only when neither the server nor the Master PC can be reached -->
+                                <StackPanel x:Name="EmergencyPanel" Visibility="Collapsed" Margin="0,18,0,0">
+                                    <TextBlock
+                                        Text="Offline. Laboratory staff can unlock this computer with the emergency code. No attendance will be recorded."
+                                        Foreground="#847A75"
+                                        FontSize="12"
+                                        TextWrapping="Wrap"
+                                        Margin="2,0,2,8"/>
+                                    <PasswordBox
+                                        x:Name="EmergencyCodeBox"
+                                        Style="{StaticResource ModernPasswordBox}"
+                                        AutomationProperties.Name="Emergency code"
+                                        Margin="0,0,0,8"/>
+                                    <Button
+                                        x:Name="EmergencyButton"
+                                        Content="Emergency unlock"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="EmergencyButton_Click"/>
+                                </StackPanel>
+
+                                <Border
+                                    Height="1"
+                                    Background="#EAE2DC"
+                                    Margin="0,25,0,18"/>
+
+                            </StackPanel>
+
+                            <!-- SCREEN 2: CLASS CONFIRMATION -->
+                            <StackPanel
+                                x:Name="ConfirmPanel"
+                                Visibility="Collapsed">
+
+                                <TextBlock
+                                    x:Name="WelcomeText"
+                                    Text="Confirm your class"
+                                    Foreground="#252326"
+                                    FontSize="22"
+                                    FontWeight="SemiBold"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,8"/>
+
+                                <TextBlock
+                                    x:Name="PromptText"
+                                    Foreground="#847A75"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,22"/>
+
+                                <TextBlock
+                                    x:Name="SuggestedLabel"
+                                    Text="YOUR ASSIGNED SESSION"
+                                    Foreground="#957E77"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Margin="2,0,0,9"/>
+
+                                <Border
+                                    Background="#F9F5F1"
+                                    BorderBrush="#E5DCD4"
+                                    BorderThickness="1"
+                                    CornerRadius="12"
+                                    Padding="15"
+                                    Margin="0,0,0,19">
+
+                                    <StackPanel>
+                                    <TextBlock
+                                        x:Name="SuggestedText"
+                                        Foreground="#403535"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="SuggestedEligibilityText" FontSize="11" Margin="0,8,0,0"
+                                               Foreground="#39734B" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Button
+                                    x:Name="YesButton"
+                                    Content="Yes, record my attendance"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Click="YesButton_Click"
+                                    Margin="0,0,0,10"/>
+
+                                <Button
+                                    x:Name="ChooseOtherButton"
+                                    Content="View other sessions"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="ChooseOtherButton_Click"
+                                    Margin="0,0,0,12"/>
+
+                                <ComboBox
+                                    x:Name="OtherClassesBox"
+                                    Style="{StaticResource ModernClassSelector}"
+                                    AutomationProperties.Name="Choose your class"
+                                    ToolTip="{Binding SelectedItem.Display, RelativeSource={RelativeSource Self}}"
+                                    SelectionChanged="OtherClassesBox_SelectionChanged"
+                                    Visibility="Collapsed"
+                                    Margin="0,0,0,10"/>
+
+                                <TextBlock x:Name="SelectionEligibilityText" Visibility="Collapsed" Foreground="#75665E"
+                                           Text="Unavailable sessions are marked in the list. Only your assigned session can be recorded."
+                                           FontSize="11" TextWrapping="Wrap" Margin="2,0,2,12"/>
+
+                                <Button
+                                    x:Name="RecordSelectedButton"
+                                    Content="Record my attendance"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Visibility="Collapsed"
+                                    Click="RecordSelectedButton_Click"
+                                    Margin="0,0,0,10"/>
+
+                                <TextBlock
+                                    x:Name="ConfirmStatusText"
+                                    Foreground="#B42318"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    MinHeight="18"
+                                    Margin="2,5,2,12"/>
+
+                                <Button
+                                    x:Name="RefreshScheduleButton"
+                                    Content="Refresh schedule"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="RefreshScheduleButton_Click"
+                                    Margin="0,0,0,8"/>
+
+                                <Button
+                                    x:Name="CancelButton"
+                                    Content="Cancel"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="CancelButton_Click"/>
+
+                            </StackPanel>
+
+                            <!-- SCREEN 3: CHANGE STARTING PASSWORD -->
+                            <StackPanel
+                                x:Name="NewPasswordPanel"
+                                Visibility="Collapsed">
+
+                                <TextBlock
+                                    x:Name="ChangeWelcomeText"
+                                    Text="Secure your account"
+                                    Foreground="#252326"
+                                    FontSize="22"
+                                    FontWeight="SemiBold"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,8"/>
+
+                                <TextBlock
+                                    Text="You're using your starting password. Create a new one to continue."
+                                    Foreground="#847A75"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,25"/>
+
+                                <TextBlock
+                                    Text="New password"
+                                    Style="{StaticResource FieldLabel}"/>
+
+                                <PasswordBox
+                                    x:Name="NewPasswordBox"
+                                    Style="{StaticResource ModernPasswordBox}"
+                                    Margin="0,0,0,18"/>
+
+                                <TextBlock
+                                    Text="Confirm new password"
+                                    Style="{StaticResource FieldLabel}"/>
+
+                                <PasswordBox
+                                    x:Name="ConfirmPasswordBox"
+                                    Style="{StaticResource ModernPasswordBox}"
+                                    Margin="0,0,0,13"/>
+
+                                <Border
+                                    Background="#F9F5EF"
+                                    CornerRadius="9"
+                                    Padding="11"
+                                    Margin="0,0,0,12">
+
+                                    <TextBlock
+                                        Text="At least 6 characters, including a lowercase letter and a number."
+                                        FontSize="11"
+                                        Foreground="#846E58"
+                                        TextWrapping="Wrap"/>
+                                </Border>
+
+                                <TextBlock
+                                    x:Name="ChangeStatusText"
+                                    Foreground="#B42318"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    MinHeight="18"
+                                    Margin="2,4,2,12"/>
+
+                                <Button
+                                    x:Name="SaveNewPasswordButton"
+                                    Content="Save and continue"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Click="SaveNewPasswordButton_Click"
+                                    Margin="0,0,0,10"/>
+
+                                <Button
+                                    x:Name="CancelChangeButton"
+                                    Content="Cancel"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="CancelChangeButton_Click"/>
+
+                            </StackPanel>
+
+                        </StackPanel>
+                    </Border>
+
+                    <!-- FOOTER -->
+                    <TextBlock
+                        Text="Copyright © 2026 LabTrack. All rights reserved."
+                        Foreground="#93857E"
+                        FontSize="10"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Margin="0,21,0,0"/>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
 
     </Grid>
 </Window>
