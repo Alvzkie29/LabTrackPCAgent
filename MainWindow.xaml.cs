@@ -18,6 +18,19 @@ public partial class MainWindow : Window
     private bool _allowClose;   // true only when Windows is shutting down or restarting
     private bool _syncingLoginPassword;
 
+    // Master PC fallback: set when the server was unreachable and the Master PC checked the login.
+    private bool _offline;
+    private string _offlineId = string.Empty;
+    private string _offlinePassword = string.Empty; // kept only until the attendance is queued
+
+    // Class end: warn a few minutes before, then lock the PC for the next class.
+    private const int LabUtcOffsetHours = 8;   // Philippine time, same as the server
+    private const int WarningMinutes = 5;
+    private TimeOnly? _classEnd;               // end time of the class the student recorded
+    private System.Windows.Threading.DispatcherTimer? _classTimer;
+    private bool _classWarned;
+
+
     public MainWindow()
     {
         InitializeComponent();
@@ -80,9 +93,11 @@ public partial class MainWindow : Window
         Hide();
 
         _endSession = new EndSessionWindow(_fullName,
-            alreadyRecorded ? "Attendance already recorded" : "Attendance recorded");
+        _offline ? "Attendance saved on the Master PC"
+        : alreadyRecorded ? "Attendance already recorded" : "Attendance recorded");
         _endSession.EndRequested += (_, _) => EndSession();
         _endSession.Show();
+        StartClassTimer();
     }
 
     private void UnlockForStaff()
@@ -107,6 +122,7 @@ public partial class MainWindow : Window
 
     private void EndSession()
     {
+        StopClassTimer();
         _endSession?.CloseForReal();
         _endSession = null;
 
@@ -120,6 +136,71 @@ public partial class MainWindow : Window
         Activate();
         _kiosk?.Enable();
     }
+    // ---------- Class end: warning, then lock ----------
+
+    /// <summary>The end time of the class the student picked, from the options the server (or Master PC) sent.</summary>
+    private TimeOnly? FindClassEnd(int sectionId)
+    {
+        if (_options is null) return null;
+
+        var chosen = _options.Suggested?.SectionId == sectionId
+            ? _options.Suggested
+            : _options.Alternatives.FirstOrDefault(a => a.SectionId == sectionId);
+        if (chosen is null) return null;
+
+        // Works whether EndTime is a TimeOnly or text like "10:00:00".
+        return TimeOnly.TryParse(Convert.ToString(chosen.EndTime, System.Globalization.CultureInfo.InvariantCulture),
+            System.Globalization.CultureInfo.InvariantCulture, out var end) ? end : null;
+    }
+
+    private void StartClassTimer()
+    {
+        StopClassTimer();
+        if (_classEnd is null) return;
+
+        // If the class has already ended (a late login), give the same short warning period
+        // instead of locking the instant the student gets in.
+        var now = TimeOnly.FromDateTime(DateTime.UtcNow.AddHours(LabUtcOffsetHours));
+        if (now >= _classEnd.Value)
+            _classEnd = now.AddMinutes(WarningMinutes);
+
+        _classWarned = false;
+        _classTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _classTimer.Tick += (_, _) => CheckClassEnd();
+        _classTimer.Start();
+        CheckClassEnd();
+    }
+
+    private void StopClassTimer()
+    {
+        _classTimer?.Stop();
+        _classTimer = null;
+        _classEnd = null;
+    }
+
+    private void CheckClassEnd()
+    {
+        if (_classEnd is null) return;
+
+        var now = TimeOnly.FromDateTime(DateTime.UtcNow.AddHours(LabUtcOffsetHours));
+        var minutesLeft = (_classEnd.Value.ToTimeSpan() - now.ToTimeSpan()).TotalMinutes;
+
+        if (minutesLeft <= 0)
+        {
+            // Time is up: lock the PC for the next class, the same as pressing End Session.
+            EndSession();
+            StatusText.Foreground = System.Windows.Media.Brushes.LightGray;
+            StatusText.Text = "The class has ended, so this computer was locked for the next class.";
+            return;
+        }
+
+        if (minutesLeft <= WarningMinutes && !_classWarned)
+        {
+            _classWarned = true;
+            _endSession?.ShowClassEnding((int)Math.Ceiling(minutesLeft));
+        }
+    }
+
 
     // ---------- Screen 1: login ----------
 
@@ -184,9 +265,13 @@ public partial class MainWindow : Window
         var login = await _api.LoginAsync(studentId, password);
         if (!login.Success)
         {
-            ShowLoginError(login.Unreachable
-                ? "Can't reach the server right now. Please wait a moment and try again."
-                : login.Error ?? "Login failed. Please check your credentials.");
+            if (login.Unreachable)
+            {
+                await TryMasterPcAsync(studentId, password);
+                return;
+            }
+
+            ShowLoginError(login.Error ?? "Login failed. Please check your credentials.");
             return;
         }
 
@@ -240,6 +325,104 @@ public partial class MainWindow : Window
         LoginButton.IsEnabled = true;
         StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
         StatusText.Text = message;
+    }
+    // ---------- Offline: Master PC fallback, then the emergency code ----------
+
+    private async Task TryMasterPcAsync(string studentId, string password)
+    {
+        if (!_api.HasMasterPc)
+        {
+            ShowLoginError("Can't reach the server right now. Please wait a moment and try again.");
+            ShowEmergencyOption();
+            return;
+        }
+
+        StatusText.Text = "Server not reachable. Trying the Master PC...";
+
+        var offline = await _api.OfflineOptionsAsync(studentId, password, _config.PcIdentifier);
+        if (offline.Unreachable)
+        {
+            ShowLoginError("Can't reach the server or the Master PC. Please tell the laboratory assistant.");
+            ShowEmergencyOption();
+            return;
+        }
+        if (!offline.Success)
+        {
+            ShowLoginError(offline.Error ?? "Login failed. Please check your credentials.");
+            return;
+        }
+
+        _offline = true;
+        _offlineId = studentId;
+        _offlinePassword = password;
+        _fullName = offline.Data!.FullName;
+        PasswordBox.Clear();
+
+        _options = offline.Data;
+        ShowConfirmPanel(_options, _fullName);
+    }
+
+    private void ShowEmergencyOption()
+    {
+        if (string.IsNullOrWhiteSpace(_config.EmergencyCodeHash)) return; // no code set for this PC
+        EmergencyCodeBox.Clear();
+        EmergencyPanel.Visibility = Visibility.Visible;
+    }
+
+    private async void EmergencyButton_Click(object sender, RoutedEventArgs e)
+    {
+        var typed = EmergencyCodeBox.Password;
+        EmergencyCodeBox.Clear();
+
+        if (!EmergencyCodeIsValid(typed))
+        {
+            // A short pause makes guessing slow.
+            EmergencyButton.IsEnabled = false;
+            ShowLoginError("That emergency code is not correct.");
+            await Task.Delay(3000);
+            EmergencyButton.IsEnabled = true;
+            return;
+        }
+
+        EmergencyPanel.Visibility = Visibility.Collapsed;
+        StatusText.Text = string.Empty;
+
+        if (!_lockActive)
+        {
+            MessageBox.Show(this, "Emergency unlock. No attendance was recorded.",
+                "LabTrack", MessageBoxButton.OK, MessageBoxImage.Information);
+            Close();
+            return;
+        }
+
+        _screenLocked = false;
+        _kiosk?.Disable();
+        Hide();
+
+        _endSession = new EndSessionWindow("Emergency unlock", "Offline · no attendance recorded");
+        _endSession.EndRequested += (_, _) => EndSession();
+        _endSession.Show();
+    }
+
+    /// <summary>Checks a typed code against the stored "salt:hash" (PBKDF2-SHA256, 100,000 rounds).</summary>
+    private bool EmergencyCodeIsValid(string typed)
+    {
+        try
+        {
+            var parts = (_config.EmergencyCodeHash ?? string.Empty).Split(':');
+            if (parts.Length != 2 || string.IsNullOrEmpty(typed)) return false;
+
+            var salt = Convert.FromBase64String(parts[0]);
+            var expected = Convert.FromBase64String(parts[1]);
+            var actual = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+                typed, salt, 100000, System.Security.Cryptography.HashAlgorithmName.SHA256, expected.Length);
+
+            return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (FormatException)
+        {
+            return false; // the stored value is not a valid hash
+        }
     }
 
     // ---------- Screen 3: set a new password ----------
@@ -437,13 +620,18 @@ public partial class MainWindow : Window
         ConfirmStatusText.Foreground = System.Windows.Media.Brushes.DimGray;
         ConfirmStatusText.Text = "Recording your attendance...";
 
-        var result = await _api.ConfirmAsync(_config.PcIdentifier, option.SectionId);
+        var sectionId = option.SectionId;
+        var result = _offline
+            ? await _api.OfflineConfirmAsync(_offlineId, _offlinePassword, _config.PcIdentifier, sectionId)
+            : await _api.ConfirmAsync(_config.PcIdentifier, sectionId);
 
         if (result.Success)
         {
+            _classEnd = FindClassEnd(sectionId);
             Unlock(result.Data!.AlreadyRecorded);
             return;
         }
+
 
         ConfirmStatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
         ConfirmStatusText.Text = result.Unreachable
@@ -459,6 +647,10 @@ public partial class MainWindow : Window
         _api.ClearSession();
         _options = null;
         _loginPassword = string.Empty;
+        _offline = false;
+        _offlineId = string.Empty;
+        _offlinePassword = string.Empty;
+        EmergencyPanel.Visibility = Visibility.Collapsed;
 
         PasswordBox.Clear();
         NewPasswordBox.Clear();

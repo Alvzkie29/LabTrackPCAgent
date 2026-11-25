@@ -678,6 +678,26 @@
                                     IsDefault="True"
                                     Click="LoginButton_Click"/>
 
+                                <!-- Shown only when neither the server nor the Master PC can be reached -->
+                                <StackPanel x:Name="EmergencyPanel" Visibility="Collapsed" Margin="0,18,0,0">
+                                    <TextBlock
+                                        Text="Offline. Laboratory staff can unlock this computer with the emergency code. No attendance will be recorded."
+                                        Foreground="#847A75"
+                                        FontSize="12"
+                                        TextWrapping="Wrap"
+                                        Margin="2,0,2,8"/>
+                                    <PasswordBox
+                                        x:Name="EmergencyCodeBox"
+                                        Style="{StaticResource ModernPasswordBox}"
+                                        AutomationProperties.Name="Emergency code"
+                                        Margin="0,0,0,8"/>
+                                    <Button
+                                        x:Name="EmergencyButton"
+                                        Content="Emergency unlock"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="EmergencyButton_Click"/>
+                                </StackPanel>
+
                                 <Border
                                     Height="1"
                                     Background="#EAE2DC"

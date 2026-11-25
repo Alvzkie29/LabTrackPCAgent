@@ -1,11 +1,11 @@
-﻿using System.Windows;
+using System.Windows;
+using System.Windows.Media;
 
 namespace LabTrackAgent;
 
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
 using Forms = System.Windows.Forms;
 
 /// <summary>A collapsible session bar. "End Session" locks the PC again.</summary>
@@ -182,6 +182,29 @@ public partial class EndSessionWindow : Window
     {
         _allowClose = true;
         Close();
+    }
+
+    /// <summary>
+    /// Called a few minutes before the class ends: brings the bar back from the tray, the
+    /// collapsed tab or the side dock, and keeps it open so the student sees the warning.
+    /// </summary>
+    public void ShowClassEnding(int minutes)
+    {
+        _dockSide = DockSide.None;
+        _isCompact = false;
+        ShowFromTray();
+        UpdatePresentation();
+        HideSessionButton.IsEnabled = false; // the warning stays on screen
+
+        InfoText.Text = minutes <= 1
+            ? "Class ends in 1 minute. Save your work now."
+            : $"Class ends in {minutes} minutes. Save your work.";
+        InfoText.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB4, 0x23, 0x18));
+        InfoText.FontWeight = FontWeights.SemiBold;
+        _trayIcon.Text = "LabTrack - class ending soon";
+
+        System.Media.SystemSounds.Exclamation.Play();
+        Activate();
     }
 
     private void EndButton_Click(object sender, RoutedEventArgs e)

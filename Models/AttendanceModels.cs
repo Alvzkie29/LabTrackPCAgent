@@ -66,3 +66,8 @@ public class MessageResponse
 {
     public string? Message { get; set; }
 }
+/// <summary>The Master PC's answer when a login is checked offline.</summary>
+public class OfflineOptions : AttendanceOptions
+{
+    public string FullName { get; set; } = string.Empty;
+}
